@@ -44,22 +44,4 @@ std::vector<Consulta> buildQueries(const Superficie& s, int r, const std::vector
 long long runQueries(int r, const std::vector<Hoja>& celdas,
                                  const std::vector<Consulta>& consultas, FuncionVecino vecino);
 
-struct ReporteMalla {
-    int vertices = 0;
-    int verticesUsados = 0;
-    int caras = 0;
-    int aristas = 0;
-    int verticesDuplicados = 0;
-    int aristasAbiertas = 0;
-    int aristasMalOrientadas = 0;
-    int euler = 0;
-    int carasHaciaAfuera = 0;
-};
-
-ReporteMalla checkMesh(const Malla& malla, const Superficie& s);
-
-int countUnique(const Malla& malla);
-
-void savePly(const Malla& malla, const std::string& archivo);
-
 #endif

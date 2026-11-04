@@ -8,15 +8,59 @@ using namespace std;
 
 const int REPETICIONES = 5;
 
+bool neighborGrid(Code c, int nivel, int direccion, int r, Code& salida) {
+    uint32_t x, y, z;
+    decode(c, r, x, y, z);
+
+    long long paso = 1LL << (r - nivel);
+    long long limite = 1LL << r;
+
+    long long nuevoX = (long long)x + desplazamiento[direccion][0] * paso;
+    long long nuevoY = (long long)y + desplazamiento[direccion][1] * paso;
+    long long nuevoZ = (long long)z + desplazamiento[direccion][2] * paso;
+
+    if (nuevoX < 0 || nuevoX >= limite) return false;
+    if (nuevoY < 0 || nuevoY >= limite) return false;
+    if (nuevoZ < 0 || nuevoZ >= limite) return false;
+
+    salida = encode(nuevoX, nuevoY, nuevoZ, r);
+    return true;
+}
+
 struct Metodo {
     const char* nombre;
     FuncionVecino funcion;
 };
 
 const Metodo metodos[] = {
-    {"oraculo", oracle},
+    {"grilla", neighborGrid},
 };
 const int TOTAL_METODOS = sizeof(metodos) / sizeof(metodos[0]);
+
+void savePly(const Malla& malla, const string& archivo) {
+    ofstream ply(archivo);
+    if (!ply.is_open()) {
+        cerr << "Error: no se pudo escribir " << archivo << '\n';
+        return;
+    }
+
+    ply << "ply\n";
+    ply << "format ascii 1.0\n";
+    ply << "element vertex " << malla.vertices.size() << "\n";
+    ply << "property float x\n";
+    ply << "property float y\n";
+    ply << "property float z\n";
+    ply << "element face " << malla.caras.size() << "\n";
+    ply << "property list uchar int vertex_indices\n";
+    ply << "end_header\n";
+
+    for (int i = 0; i < (int)malla.vertices.size(); i++) {
+        ply << malla.vertices[i].x << " " << malla.vertices[i].y << " " << malla.vertices[i].z << "\n";
+    }
+    for (int i = 0; i < (int)malla.caras.size(); i++) {
+        ply << "3 " << malla.caras[i][0] << " " << malla.caras[i][1] << " " << malla.caras[i][2] << "\n";
+    }
+}
 
 double elapsed(chrono::steady_clock::time_point inicio) {
     chrono::duration<double> transcurrido = chrono::steady_clock::now() - inicio;
