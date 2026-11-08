@@ -1,0 +1,7 @@
+.vscode/
+bin/*
+!bin/.gitignore
+*.exe
+*.o
+*.ply
+results/consultas_*.csv
