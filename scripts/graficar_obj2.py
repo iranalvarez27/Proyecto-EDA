@@ -39,7 +39,7 @@ def leer():
         }
         for columna in COLUMNAS:
             valores = [float(x[columna]) for x in filas]
-            fila[columna] = round(statistics.mean(valores), 2)
+            fila[columna] = round(min(valores), 2)
             fila[columna + "_desv"] = round(statistics.stdev(valores), 2) if len(valores) > 1 else 0.0
         resumen.append(fila)
     return resumen

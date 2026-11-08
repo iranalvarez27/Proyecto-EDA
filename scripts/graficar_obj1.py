@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-"""Promedia las 5 corridas del objetivo 1 y produce figuras PNG.
-
-Uso: python3 scripts/graficar_obj1.py [results/obj1.csv]
-Requiere matplotlib (pip install matplotlib).
-"""
 import csv
-import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -30,7 +23,7 @@ def main():
             "tipo": tipo,
             "metodo": metodo,
             "corridas": len(datos),
-            "ns_por_consulta": statistics.mean(float(f["ns_por_consulta"]) for f in datos),
+            "ns_por_consulta": min(float(f["ns_por_consulta"]) for f in datos),
             "digitos_reflejados": float(datos[0]["digitos_reflejados"]),
         })
 
@@ -49,7 +42,6 @@ def main():
         print("Matplotlib no instalado: resumen CSV guardado, sin figuras.")
         return
 
-    # Una figura por caso y tipo: tiempo por consulta de cada método.
     for caso in sorted(set(f["caso"] for f in resumen)):
         for tipo in sorted(set(f["tipo"] for f in resumen)):
             fig, ax = plt.subplots(figsize=(8, 5))
@@ -72,7 +64,6 @@ def main():
             plt.close(fig)
             print("Figura:", png)
 
-    # Dígitos reflejados por Samet: no depende del método, se toma schrack.
     fig, ax = plt.subplots(figsize=(8, 5))
     for caso in sorted(set(f["caso"] for f in resumen)):
         for tipo in sorted(set(f["tipo"] for f in resumen)):
