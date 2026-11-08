@@ -141,6 +141,19 @@ vector<Consulta> buildQueries(const Superficie& s, int r, const vector<Hoja>& ce
     return consultas;
 }
 
+long long runDirecciones(int r, const vector<Hoja>& celdas, const vector<Consulta>& consultas, FuncionVecino vecino) {
+    long long checksum = 0;
+
+    for (int i = 0; i < (int)consultas.size(); i++) {
+        Code codigoVecina;
+        bool dentro = vecino(celdas[consultas[i].celda].codigo, r, consultas[i].direccion, r, codigoVecina);
+        if (dentro) {
+            checksum = checksum + (long long)(codigoVecina & 0xFFFF);
+        }
+    }
+    return checksum;
+}
+
 long long runQueries(int r, const vector<Hoja>& celdas,const vector<Consulta>& consultas, FuncionVecino vecino) {
     long long checksum = 0;
 

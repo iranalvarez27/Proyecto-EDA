@@ -104,26 +104,10 @@ int countErrors(int r, const vector<ConsultaVecino>& consultas, const vector<Hoj
     return errores;
 }
 
-void saveQueries(const Superficie& s, int r, const vector<ConsultaVecino>& consultas,
-                 const vector<Code>& vecinas) {
-    string archivo = "results/consultas_" + string(s.nombre) + "_r" + to_string(r) + ".csv";
-    ofstream salida(archivo);
-    salida << "superficie,r,codigo,nivel,direccion,codigo_vecina\n";
-    for (int i = 0; i < (int)consultas.size(); i++) {
-        salida << s.nombre << "," << r << "," << consultas[i].codigo << "," << r << ","
-               << consultas[i].direccion << "," << vecinas[i] << "\n";
-    }
-}
-
 int main(int argc, char* argv[]) {
     int rMaximo = 10;
-    bool exportar = false;
-    for (int i = 1; i < argc; i++) {
-        if (string(argv[i]) == "--consultas") {
-            exportar = true;
-        } else {
-            rMaximo = atoi(argv[i]);
-        }
+    if (argc > 1) {
+        rMaximo = atoi(argv[1]);
     }
 
     filesystem::create_directories("results");
@@ -158,9 +142,6 @@ int main(int argc, char* argv[]) {
                 cout << "ERROR: " << errores << " consultas fallaron en " << superficies[s].nombre
                      << " r=" << r << "\n";
                 return 1;
-            }
-            if (exportar) {
-                saveQueries(superficies[s], r, consultas, vecinas);
             }
 
             int vueltas = 1;

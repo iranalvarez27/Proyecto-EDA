@@ -37,8 +37,6 @@ uint32_t contraer(Code dilatado, int D, int r) {
     return resultado;
 }
 
-// Suma de cada eje por separado: los bits de los otros ejes se rellenan con 1
-// para que el acarreo los cruce (en 3D: t1 = 6tx, t2 = 5tx, t3 = 3tx).
 Code sumaDilatada(Code a, Code b, int D, int r) {
     Code grupos = mascaraGrupos(D, r);
     Code tx = mascaraX(D, r);
@@ -51,7 +49,6 @@ Code sumaDilatada(Code a, Code b, int D, int r) {
     return resultado;
 }
 
-// Desplazamientos unitarios: dilatar(1) = 1 y dilatar(-1) = tx.
 Code incremento(const int desp[], int D, int r) {
     Code resultado = 0;
     for (int k = 0; k < D; k++) {

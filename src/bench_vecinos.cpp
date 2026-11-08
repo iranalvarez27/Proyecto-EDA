@@ -30,7 +30,6 @@ const Metodo metodos[] = {
 };
 const int TOTAL_METODOS = sizeof(metodos) / sizeof(metodos[0]);
 
-// Peor caso: la coordenada obliga a reflejar todos los dígitos (0111...1 -> 1000...0)
 uint32_t coordenada(int d, bool peor, int r, mt19937_64& generador) {
     if (peor && d == 1) return (1u << (r - 1)) - 1;
     if (peor && d == -1) return 1u << (r - 1);

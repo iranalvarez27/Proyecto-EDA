@@ -2,30 +2,15 @@
 #include <fstream>
 #include <chrono>
 #include <cstdlib>
+#include <algorithm>
 #include "marching_cubes.h"
 
 using namespace std;
 
 const int REPETICIONES = 5;
+const double TIEMPO_MINIMO = 0.05;
 
-bool neighborGrid(Code c, int nivel, int direccion, int r, Code& salida) {
-    uint32_t x, y, z;
-    decode(c, r, x, y, z);
-
-    long long paso = 1LL << (r - nivel);
-    long long limite = 1LL << r;
-
-    long long nuevoX = (long long)x + desplazamiento[direccion][0] * paso;
-    long long nuevoY = (long long)y + desplazamiento[direccion][1] * paso;
-    long long nuevoZ = (long long)z + desplazamiento[direccion][2] * paso;
-
-    if (nuevoX < 0 || nuevoX >= limite) return false;
-    if (nuevoY < 0 || nuevoY >= limite) return false;
-    if (nuevoZ < 0 || nuevoZ >= limite) return false;
-
-    salida = encode(nuevoX, nuevoY, nuevoZ, r);
-    return true;
-}
+volatile long long sumidero = 0;
 
 struct Metodo {
     const char* nombre;
@@ -33,7 +18,9 @@ struct Metodo {
 };
 
 const Metodo metodos[] = {
-    {"grilla", neighborGrid},
+    {"schrack", schrack},
+    {"samet", samet},
+    {"oraculo", oracle},
 };
 const int TOTAL_METODOS = sizeof(metodos) / sizeof(metodos[0]);
 
@@ -67,15 +54,39 @@ double elapsed(chrono::steady_clock::time_point inicio) {
     return transcurrido.count();
 }
 
+template <typename F>
+double medir(F f) {
+    int veces = 0;
+    auto inicio = chrono::steady_clock::now();
+    do {
+        sumidero = sumidero + f();
+        veces++;
+    } while (elapsed(inicio) < TIEMPO_MINIMO);
+    return elapsed(inicio) / veces;
+}
+
+template <typename F>
+double medirPromedio(F f) {
+    double mejor = medir(f);
+    for (int rep = 1; rep < REPETICIONES; rep++) {
+        mejor = min(mejor, medir(f));
+    }
+    return mejor;
+}
+
 int main(int argc, char* argv[]) {
     int rMaximo = 10;
     if (argc > 1) {
         rMaximo = atoi(argv[1]);
     }
 
-    ofstream csv("obj3.csv");
-    csv << "superficie,r,celdas,metodo,t_por_celda,t_compartido,t_vecinos,fraccion_vecinos,"
-        << "v_por_celda,v_compartido,triangulos\n";
+    ofstream csv("results/obj3.csv");
+    if (!csv.is_open()) {
+        cerr << "Error: no se pudo escribir results/obj3.csv (correr desde la raiz del repositorio)\n";
+        return 1;
+    }
+    csv << "superficie,r,celdas,metodo,t_por_celda,t_sopa,t_compartido,t_direccion,t_busqueda,"
+        << "fraccion_direccion,fraccion_busqueda,v_sopa,v_por_celda,v_compartido,triangulos\n";
 
     Superficie superficies[2] = {ESFERA, TORO};
 
@@ -84,63 +95,54 @@ int main(int argc, char* argv[]) {
             vector<Hoja> celdas = findCells(superficies[s], r);
             vector<Consulta> consultas = buildQueries(superficies[s], r, celdas);
 
-            Malla porCelda;
-            double tPorCelda = 0;
-            for (int rep = 0; rep < REPETICIONES; rep++) {
-                auto inicio = chrono::steady_clock::now();
-                mcPerCell(superficies[s], r, celdas, porCelda);
-                tPorCelda = tPorCelda + elapsed(inicio);
-            }
-            tPorCelda = tPorCelda / REPETICIONES;
+            Malla sopa, porCelda;
+            double tSopa = medirPromedio([&]() { mcSoup(superficies[s], r, celdas, sopa); return (long long)sopa.vertices.size(); });
+            double tPorCelda = medirPromedio([&]() { mcPerCell(superficies[s], r, celdas, porCelda); return (long long)porCelda.vertices.size(); });
 
             for (int m = 0; m < TOTAL_METODOS; m++) {
                 Malla compartida;
-                double tCompartido = 0;
-                double tVecinos = 0;
-                long long checksum = 0;
                 int fallasVecino = 0;
+                FuncionVecino f = metodos[m].funcion;
 
-                for (int rep = 0; rep < REPETICIONES; rep++) {
-                    auto inicio = chrono::steady_clock::now();
-                    fallasVecino = mcShared(superficies[s], r, celdas, metodos[m].funcion, compartida);
-                    tCompartido = tCompartido + elapsed(inicio);
-
-                    inicio = chrono::steady_clock::now();
-                    checksum = checksum + runQueries(r, celdas, consultas, metodos[m].funcion);
-                    tVecinos = tVecinos + elapsed(inicio);
-                }
-                tCompartido = tCompartido / REPETICIONES;
-                tVecinos = tVecinos / REPETICIONES;
+                double tCompartido = medirPromedio([&]() {
+                    fallasVecino = mcShared(superficies[s], r, celdas, f, compartida);
+                    return (long long)compartida.vertices.size();
+                });
+                double tDireccion = medirPromedio([&]() { return runDirecciones(r, celdas, consultas, f); });
+                double tBusqueda = medirPromedio([&]() { return runQueries(r, celdas, consultas, f); });
 
                 if (fallasVecino != 0) {
                     cout << "ADVERTENCIA: " << fallasVecino << " vecinas no encontradas\n";
                 }
 
-                double fraccion = tVecinos / tCompartido;
+                double fDireccion = tDireccion / tCompartido;
+                double fBusqueda = tBusqueda / tCompartido;
 
                 csv << superficies[s].nombre << "," << r << "," << celdas.size() << ","
                     << metodos[m].nombre << ","
-                    << tPorCelda << "," << tCompartido << ","
-                    << tVecinos << "," << fraccion << ","
-                    << porCelda.vertices.size() << ","
+                    << tPorCelda << "," << tSopa << "," << tCompartido << ","
+                    << tDireccion << "," << tBusqueda << ","
+                    << fDireccion << "," << fBusqueda << ","
+                    << sopa.vertices.size() << "," << porCelda.vertices.size() << ","
                     << compartida.vertices.size() << "," << compartida.caras.size() << "\n";
 
                 cout << superficies[s].nombre << " r=" << r
                      << " celdas=" << celdas.size()
                      << " metodo=" << metodos[m].nombre
                      << " t_compartido=" << tCompartido << "s"
-                     << " vecinos=" << fraccion * 100 << "%"
-                     << " vertices " << porCelda.vertices.size()
-                     << " / " << compartida.vertices.size()
-                     << " (checksum " << checksum << ")\n";
+                     << " direccion=" << fDireccion * 100 << "%"
+                     << " direccion+existencia=" << fBusqueda * 100 << "%"
+                     << " vertices " << sopa.vertices.size()
+                     << " / " << porCelda.vertices.size()
+                     << " / " << compartida.vertices.size() << "\n";
 
                 if (r == 7 && m == 0) {
-                    savePly(compartida, string(superficies[s].nombre) + "_r7.ply");
+                    savePly(compartida, "results/" + string(superficies[s].nombre) + "_r7.ply");
                 }
             }
         }
     }
 
-    cout << "Resultados en obj3.csv\n";
+    cout << "Resultados en results/obj3.csv\n";
     return 0;
 }
