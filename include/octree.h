@@ -42,13 +42,6 @@ const int desplazamiento[TOTAL_DIRECCIONES][3] = {
     { 0,  1,  1}, { 0,  1, -1}, { 0, -1,  1}, { 0, -1, -1}
 };
 
-inline bool isFace(int direccion) {
-    if (direccion < TOTAL_CARAS) {
-        return true;
-    }
-    return false;
-}
-
 inline Code encode(uint32_t x, uint32_t y, uint32_t z, int r) {
     Code codigo = 0;
     for (int i = 0; i < r; i++) {

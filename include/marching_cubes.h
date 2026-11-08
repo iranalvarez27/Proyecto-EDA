@@ -29,6 +29,8 @@ int findCell(const std::vector<Hoja>& celdas, Code codigo, int nivel);
 
 void mcPerCell(const Superficie& s, int r, const std::vector<Hoja>& celdas, Malla& malla);
 
+void mcSoup(const Superficie& s, int r, const std::vector<Hoja>& celdas, Malla& malla);
+
 typedef bool (*FuncionVecino)(Code c, int nivel, int direccion, int r, Code& salida);
 
 int mcShared(const Superficie& s, int r, const std::vector<Hoja>& celdas,
@@ -40,6 +42,9 @@ struct Consulta {
 };
 
 std::vector<Consulta> buildQueries(const Superficie& s, int r, const std::vector<Hoja>& celdas);
+
+long long runDirecciones(int r, const std::vector<Hoja>& celdas,
+                         const std::vector<Consulta>& consultas, FuncionVecino vecino);
 
 long long runQueries(int r, const std::vector<Hoja>& celdas,
                                  const std::vector<Consulta>& consultas, FuncionVecino vecino);

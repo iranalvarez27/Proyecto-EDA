@@ -4,4 +4,3 @@ bin/*
 *.exe
 *.o
 *.ply
-results/consultas_*.csv
