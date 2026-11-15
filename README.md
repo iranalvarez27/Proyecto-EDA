@@ -1,34 +1,78 @@
 # Vecinos de igual tamaño en octrees lineales: una aplicación a Marching Cubes
 
-Proyecto de curso I de **CS3014 Estructuras de Datos Avanzadas** (UTEC).
+Proyecto de curso I · **CS3014 Estructuras de Datos Avanzadas** · Universidad de Ingeniería y Tecnología (UTEC) · 2026-2
 
-Integrantes: Irán María Alvarez Flores, Harold Canto Vidal y Luis Fernando Izaguirre Zavaleta.
+**Integrantes:** Irán María Alvarez Flores, Harold Canto Vidal y Luis Fernando Izaguirre Zavaleta
+**Docente:** Víctor Racsó Galván Oyola
 
-Paper base: G. Schrack, *Finding neighbors of equal size in linear quadtrees and octrees in constant time*, CVGIP: Image Understanding 55(3), 1992.
+**Artículo base:** G. Schrack, *Finding neighbors of equal size in linear quadtrees and octrees in constant time*, CVGIP: Image Understanding 55(3), 221–230, 1992.
 
 ---
 
-## Descripción
+## Contenido
 
-Un octree guarda un volumen 3D partiendo el cubo en 8 cubitos, y cada cubito en otros 8, hasta una profundidad `r`. En un **octree lineal** no hay punteros: cada hoja es un número (su *location code*, con los bits de x, y, z intercalados) y el árbol es un arreglo ordenado de esos números.
+1. [Resumen](#resumen)
+2. [Descripción del problema](#descripción-del-problema)
+3. [Arquitectura](#arquitectura)
+4. [Requisitos](#requisitos)
+5. [Compilación](#compilación)
+6. [Pruebas](#pruebas)
+7. [Ejecución de los experimentos](#ejecución-de-los-experimentos)
+8. [Metodología](#metodología)
+9. [Resultados](#resultados)
+10. [Conclusiones](#conclusiones)
+11. [Limitaciones](#limitaciones)
+12. [Referencias](#referencias)
 
-Marching Cubes necesita, para cada celda de la superficie, el **vecino del mismo tamaño**, para reutilizar los vértices que ese vecino ya calculó. El proyecto implementa dos formas de calcular su dirección, las compara y las integra a Marching Cubes:
+---
 
-| Método | Idea | Costo |
-|---|---|---|
-| **Samet (1989)**, reflexión de dígitos | Recorre los dígitos del código desde el último nivel, reflejándolos, hasta llegar al ancestro común. | O(r) en el peor caso, O(1) en promedio |
-| **Schrack (1992)**, enteros dilatados | Separa los bits de cada coordenada con huecos; el vecino sale de una suma de enteros y unas máscaras. | O(1), no recorre niveles |
+## Resumen
 
-Además se usa un tercer método, el **oráculo** (decodifica a x, y, z, suma 1 y vuelve a codificar). Es lento, pero obviamente correcto, y sirve para comprobar a los otros dos.
+El proyecto implementa en C++17 un octree lineal y dos métodos para calcular el código del vecino de igual tamaño de una hoja: la **reflexión de dígitos de Samet**, de costo O(r) en el peor caso, y la **suma dilatada de Schrack**, de costo O(1). Ambos se comparan de forma aislada, dentro de una búsqueda completa con verificación de existencia y dentro de una variante de **Marching Cubes con vértices compartidos**.
+
+Resultados principales con r = 10:
+
+| Pregunta | Respuesta |
+|---|---|
+| ¿Se observa el tiempo constante de Schrack? | **Sí.** Su tiempo no cambia entre r = 4 y r = 10 (cociente 1.01), mientras que Samet crece un 51 % por arista en el peor caso. |
+| ¿Cuánto pesa verificar que el vecino existe? | **Domina la consulta.** Con búsqueda binaria es entre el 72 % y el 74 % del tiempo de la consulta completa. |
+| ¿Qué efecto tiene en Marching Cubes? | La malla compartida usa **6 veces menos vértices** y tarda unas 3.5 veces más. Con Schrack es un 4 % más rápida que con Samet. |
+
+---
+
+## Descripción del problema
+
+Un octree divide recursivamente el dominio en ocho octantes hasta una profundidad máxima `r`. En un **octree lineal** no hay punteros: cada hoja se representa por su *location code*, que intercala los bits de las coordenadas `x`, `y`, `z` de su esquina, junto con su nivel. El árbol se guarda como un arreglo ordenado de pares (código, nivel).
+
+Marching Cubes interpola un vértice en cada arista de la rejilla que corta la superficie. Una arista interior pertenece a cuatro celdas, así que, para no calcular el mismo vértice varias veces, cada celda debe localizar a la celda vecina que ya lo calculó. Esa consulta tiene dos pasos:
+
+```mermaid
+flowchart LR
+    A["Hoja (c, ℓ)"] --> B["Calcular el código<br/>de la vecina c'"]
+    B --> C{"¿Dentro<br/>del dominio?"}
+    C -- No --> X["Sin vecina"]
+    C -- Sí --> D["Verificar que existe<br/>la hoja (c', ℓ)"]
+    D --> E["Reutilizar el índice<br/>del vértice"]
+```
+
+El proyecto compara tres formas de resolver el primer paso y dos formas de resolver el segundo:
+
+| Paso | Método | Idea | Costo |
+|---|---|---|---|
+| Dirección | **Samet (1989)**, reflexión de dígitos | Invierte los bits del eje desplazado, desde el nivel más profundo, hasta que termina el acarreo. | O(r) en el peor caso, O(1) esperado |
+| Dirección | **Schrack (1992)**, suma dilatada | Suma un incremento al código intercalado usando máscaras que rellenan los huecos entre bits de un mismo eje. | O(1) |
+| Dirección | **Oráculo** | Decodifica a (x, y, z), suma el desplazamiento y vuelve a codificar. Se usa como referencia de corrección. | O(r) |
+| Existencia | **Búsqueda binaria** | Busca el par (código, nivel) en el arreglo ordenado de hojas. | O(log N) |
+| Existencia | **Tabla hash** | `std::unordered_set` con las mismas hojas. | O(1) esperado, O(N) de memoria adicional |
 
 ### Objetivos
 
 | # | Objetivo |
 |---|---|
-| 1 | Implementar dilatación, contracción y suma dilatada, y medir la dirección del vecino (Schrack frente a Samet) en el peor caso y en el promedio, con r entre 4 y 10. |
-| 2 | Implementar el octree lineal y medir la búsqueda completa de un vecino: dirección más verificación de que existe (búsqueda binaria; tabla hash como extra). |
-| 3 | Marching Cubes con vértices compartidos: fracción del tiempo que ocupa la búsqueda de vecinos y reducción de vértices. |
-| 4 | Verificar la corrección: los métodos coinciden, la malla es válida y se reproducen los ejemplos del paper. |
+| 1 | Implementar dilatación, contracción y suma dilatada, y medir el cálculo de la dirección del vecino con Schrack y con Samet, en el peor caso y con coordenadas aleatorias, para r entre 4 y 10. |
+| 2 | Implementar el octree lineal y medir la búsqueda completa del vecino: dirección más verificación de existencia, con búsqueda binaria y con tabla hash. |
+| 3 | Implementar Marching Cubes con vértices compartidos y medir qué fracción del tiempo ocupa la búsqueda de vecinos y cuánto se reduce el número de vértices. |
+| 4 | Verificar la corrección: los tres métodos coinciden, la malla es válida y se reproducen los ejemplos numéricos del artículo. |
 
 ---
 
@@ -36,16 +80,38 @@ Además se usa un tercer método, el **oráculo** (decodifica a x, y, z, suma 1 
 
 ```mermaid
 flowchart TD
-    SUP["Superficie implícita<br/>esfera o toro · superficies.h"] --> OCT["Octree lineal<br/>arreglo ordenado de hojas · octree_lineal.cpp"]
-    OCT --> CEL["Celdas de superficie<br/>celdas_superficie.cpp"]
-    CEL --> MC["Marching Cubes<br/>baseline y malla compartida · mc_baseline.cpp, mc_compartido.cpp"]
-    MC --> VEC["Vecino de igual tamaño<br/>schrack · samet · oracle · vecinos.cpp"]
-    MC --> EXI["Verificación de existencia<br/>búsqueda binaria o hash · octree_lineal.cpp"]
-    OCT --> EXI
-    VEC --> DIL["Enteros dilatados<br/>dilatar, contraer, sumaDilatada"]
+    SUP["Superficie implícita<br/>esfera o toro<br/>superficies.h"] --> OCT["Octree lineal<br/>arreglo ordenado de hojas<br/>octree_lineal.cpp"]
+    SUP --> CEL["Celdas activas<br/>hojas de nivel r con signos mixtos<br/>celdas_superficie.cpp"]
+    CEL --> MC["Marching Cubes<br/>mcSoup, mcPerCell, mcShared<br/>mc_baseline.cpp, mc_compartido.cpp"]
+    MC --> VEC["Dirección del vecino<br/>schrack, samet, oracle<br/>vecinos.cpp"]
+    OCT --> EXI["Verificación de existencia<br/>hasLeaf, hasLeafHash<br/>octree_lineal.cpp"]
+    VEC --> DIL["Enteros dilatados<br/>dilatar, contraer, sumaDilatada<br/>vecinos.cpp"]
 ```
 
-El flujo es: se define una superficie, se construye el octree subdividiendo hasta la profundidad `r` toda celda que la superficie cruza, y Marching Cubes recorre esas celdas. Para compartir un vértice, cada celda calcula la dirección de su vecina (con Schrack, Samet o el oráculo) y comprueba que existe en el arreglo.
+El octree completo y las celdas activas se construyen con la misma poda: una celda se descarta si la superficie no puede cruzarla (ver [Metodología](#metodología)). El benchmark de existencia consulta las `N` hojas del octree completo; el mallado consulta por búsqueda binaria las `M` celdas activas.
+
+### Marching Cubes con vértices compartidos
+
+`mcShared` recorre las celdas activas dos veces. Cada celda es propietaria de tres aristas: las que salen de su esquina mínima en +x, +y y +z.
+
+```mermaid
+flowchart LR
+    subgraph P1["Pasada 1"]
+        A1["Detectar las aristas<br/>propias cortadas"] --> A2["Interpolar el vértice<br/>y guardar su índice"]
+    end
+    subgraph P2["Pasada 2"]
+        B1["Para cada arista restante,<br/>localizar a la celda propietaria"] --> B2["Reutilizar su índice<br/>y emitir los triángulos"]
+    end
+    P1 --> P2
+```
+
+Las tres variantes que se comparan reciben las mismas celdas activas:
+
+| Variante | Vértices que reutiliza | Consultas a vecinas |
+|---|---|---|
+| `mcSoup` | Ninguno: emite tres vértices por triángulo. | Ninguna |
+| `mcPerCell` | Los de las aristas de una misma celda. | Ninguna |
+| `mcShared` | Los de las aristas compartidas entre celdas. | Dirección y búsqueda binaria |
 
 ### Estructura del repositorio
 
@@ -53,26 +119,26 @@ El flujo es: se define una superficie, se construye el octree subdividiendo hast
 Proyecto-EDA/
 ├── include/
 │   ├── octree.h            # Code, Hoja, las 18 direcciones, encode y decode
-│   ├── vecinos.h           # enteros dilatados
-│   ├── octree_lineal.h     # construirOctree, hasLeaf, hasLeafHash
-│   ├── superficies.h       # esfera, toro y el test conservador canCross
+│   ├── vecinos.h           # enteros dilatados y métodos de vecinos
+│   ├── octree_lineal.h     # construirOctree, construirTabla, hasLeaf, hasLeafHash
+│   ├── superficies.h       # esfera, toro y la poda canCross
 │   ├── marching_cubes.h    # tipos y funciones de Marching Cubes
 │   └── tablas.h            # tablas de Marching Cubes (edgeTable, triTable)
 ├── src/
 │   ├── vecinos.cpp         # dilatar, contraer, sumaDilatada, schrack, samet, oracle
-│   ├── octree_lineal.cpp   # construcción del octree, búsqueda binaria y hash
+│   ├── octree_lineal.cpp   # construcción del octree, búsqueda binaria y tabla hash
 │   ├── celdas_superficie.cpp
-│   ├── mc_baseline.cpp     # Marching Cubes sin compartir (mcSoup y mcPerCell)
-│   ├── mc_compartido.cpp   # Marching Cubes con vértices compartidos y consultas
-│   ├── main_mc.cpp         # benchmark del objetivo 3
+│   ├── mc_baseline.cpp     # mcSoup y mcPerCell
+│   ├── mc_compartido.cpp   # mcShared y las consultas de vecinos del mallado
 │   ├── bench_vecinos.cpp   # benchmark del objetivo 1
-│   └── bench_octree.cpp    # benchmark del objetivo 2
+│   ├── bench_octree.cpp    # benchmark del objetivo 2
+│   └── main_mc.cpp         # benchmark del objetivo 3
 ├── tests/
-│   ├── test_vecinos.cpp    # ejemplos del paper y coincidencia entre métodos
-│   ├── test_octree.cpp     # octree, existencia y consultas de Marching Cubes
-│   └── test_malla.cpp      # validez de la malla
+│   ├── test_vecinos.cpp
+│   ├── test_octree.cpp
+│   └── test_malla.cpp
 ├── scripts/                # graficar_obj1.py, graficar_obj2.py, graficar_obj3.py
-├── results/                # CSV y figuras de los tres benchmarks
+├── results/                # CSV, resúmenes, tablas y figuras
 └── Makefile
 ```
 
@@ -80,98 +146,114 @@ Proyecto-EDA/
 
 ## Requisitos
 
-| Recurso | Necesario |
+| Recurso | Requisito |
 |---|---|
 | Sistema | 64 bits (Windows, Linux o macOS). Los location codes son `uint64_t`. |
-| Compilador | g++ con C++17 (probado con g++ 16.1 de MSYS2 en Windows 11). |
-| Herramienta de compilación | `make` (GNU). |
-| Python | Python 3 con `matplotlib` (`pip install matplotlib`), solo para las figuras. |
-| Memoria | Unos 2 GB de RAM libres para el objetivo 2 con r = 10 (el toro tiene 32.5 millones de hojas y la tabla hash las guarda todas). Con r ≤ 8 basta mucho menos. |
-| Disco | Unos 5 MB para `results/`, más 4.4 MB de las mallas `.ply` si se corre el objetivo 3. |
+| Compilador | g++ con soporte de C++17. Probado con g++ 16.1 (MSYS2) en Windows 11. |
+| Compilación | GNU `make` (opcional, ver [Compilación](#compilación)). |
+| Python | Python 3 con `matplotlib`, solo para las figuras: `pip install matplotlib`. |
+| Memoria | Unos 2 GB libres para el objetivo 2 con r = 10. El toro tiene 32.5 millones de hojas y la tabla hash las guarda todas. |
+| Disco | Unos 5 MB para `results/`, más 4.4 MB de las mallas `.ply`. |
 
-No hay dependencias externas de C++: solo la librería estándar. Las tablas de Marching Cubes están en `include/tablas.h`.
+El código solo usa la biblioteca estándar de C++.
 
 ---
 
 ## Compilación
 
-Todos los comandos se corren desde la raíz del repositorio.
+Desde la raíz del repositorio:
 
 ```bash
 make
 ```
 
-Los ejecutables quedan en `bin/` (`bench_vecinos`, `bench_octree`, `mc`, `test_vecinos`, `test_octree`, `test_malla`). Todo se compila con `-O2 -std=c++17 -Wall -Wextra` y corre en un solo hilo. En Windows el Makefile enlaza con `-static`.
+Los ejecutables quedan en `bin/`: `bench_vecinos`, `bench_octree`, `mc`, `test_vecinos`, `test_octree` y `test_malla`. Todo se compila con `-O2 -std=c++17 -Wall -Wextra` y se ejecuta en un solo hilo. En Windows el Makefile enlaza con `-static`.
 
 ### Windows con MSYS2
 
-1. Instalar MSYS2 y, desde su terminal, `pacman -S mingw-w64-x86_64-gcc make`.
-2. Poner en el `PATH` primero `C:\msys64\mingw64\bin` y después `C:\msys64\usr\bin`. El orden importa: si `usr\bin` va primero, `make` usa el `g++` de MSYS, los `.exe` quedan dependiendo de `msys-2.0.dll` y fallan al ejecutarse con el código `0xC0000135`.
-3. Compilar y correr desde PowerShell. Los ejecutables se llaman con `bin\bench_octree.exe 10`.
+1. Instalar MSYS2 y, desde su terminal, ejecutar `pacman -S mingw-w64-x86_64-gcc make`.
+2. Agregar al `PATH` primero `C:\msys64\mingw64\bin` y después `C:\msys64\usr\bin`. Si `usr\bin` va primero, `make` usa el `g++` de MSYS, los ejecutables dependen de `msys-2.0.dll` y fallan con el código `0xC0000135`.
+3. Compilar y ejecutar desde PowerShell, por ejemplo `bin\bench_octree.exe 10`.
 
-Si no hay `make`, cada programa se compila a mano. Por ejemplo, el objetivo 3:
+### Sin `make`
+
+Cada programa se puede compilar directamente con `g++`:
 
 ```bash
-g++ -O2 -std=c++17 -Iinclude src/main_mc.cpp src/mc_baseline.cpp src/celdas_superficie.cpp src/mc_compartido.cpp src/vecinos.cpp -o bin/mc
+g++ -O2 -std=c++17 -Wall -Wextra -Iinclude src/bench_vecinos.cpp src/vecinos.cpp -o bin/bench_vecinos.exe -static
+g++ -O2 -std=c++17 -Wall -Wextra -Iinclude src/bench_octree.cpp src/octree_lineal.cpp src/vecinos.cpp src/celdas_superficie.cpp src/mc_compartido.cpp -o bin/bench_octree.exe -static
+g++ -O2 -std=c++17 -Wall -Wextra -Iinclude src/main_mc.cpp src/mc_baseline.cpp src/celdas_superficie.cpp src/mc_compartido.cpp src/vecinos.cpp -o bin/mc.exe -static
 ```
+
+En Linux o macOS se omiten `.exe` y `-static`.
 
 ---
 
-## Tests
+## Pruebas
 
 ```bash
 make test
 ```
 
-La salida termina con `Todos los tests pasaron` (dos veces) y `Todos los tests de malla pasaron`. Si algo falla, se imprime una línea `FALLA` con el nombre de la prueba.
+La salida termina con `Todos los tests pasaron` (dos veces) y `Todos los tests de malla pasaron`. Si una prueba falla, se imprime una línea `FALLA` con su nombre.
 
 | Programa | Qué comprueba |
 |---|---|
-| `test_vecinos` | Los ejemplos numéricos del paper (dilataciones de la figura 3, suma de location codes) y que Schrack = Samet = oráculo con códigos aleatorios (semilla 2026). |
-| `test_octree` | Para la esfera y el toro con r = 4…7: hojas ordenadas y sin duplicados; volumen total igual a 1; las celdas de superficie son hojas de nivel r; existen las 4 celdas de cada arista cortada; `hasLeaf` y `hasLeafHash` coinciden con un `std::set`; los tres métodos dan el mismo código en todas las consultas de Marching Cubes y la vecina existe. |
-| `test_malla` | Para la esfera y el toro con r = 4…7: no falta ninguna vecina; la malla compartida es idéntica con los tres métodos; los índices son válidos y no hay vértices huérfanos; la malla es cerrada (cada arista está en exactamente 2 triángulos); los triángulos coinciden con los de la versión sin compartir (coordenadas redondeadas a 1e-9, porque una misma arista recorrida en sentido contrario difiere en el último bit del `double`); vértices de compartida < por celda < 3 por triángulo. |
+| `test_vecinos` | Los ejemplos numéricos del artículo (ver [Objetivo 4](#objetivo-4-corrección)) y que Schrack, Samet y el oráculo coinciden en 200 000 consultas aleatorias (semilla 12345), variando profundidad, nivel y dirección. |
+| `test_octree` | Para la esfera y el toro con r = 4…7: hojas ordenadas y sin duplicados; volumen total igual a 1; las celdas activas son hojas de nivel r; existen las cuatro celdas de cada arista cortada; `hasLeaf` y `hasLeafHash` coinciden con un `std::set`; los tres métodos dan el mismo código en todas las consultas de Marching Cubes. |
+| `test_malla` | Para la esfera y el toro con r = 4…7: no falta ninguna vecina; la malla compartida es idéntica con los tres métodos; los índices son válidos y no hay vértices sin usar; la malla es cerrada (cada arista está en exactamente dos triángulos); los triángulos coinciden con los de `mcSoup` tras redondear las coordenadas a 10⁻⁹. |
 
 ---
 
 ## Ejecución de los experimentos
 
-Cada benchmark recibe como argumento la **profundidad máxima** (por defecto 10) y recorre r = 4 hasta ese valor, para la esfera y el toro. Se corren desde la raíz, porque escriben en `results/`.
+```mermaid
+flowchart LR
+    B1["bin/bench_vecinos"] --> C1["results/obj1.csv"]
+    B2["bin/bench_octree"] --> C2["results/obj2.csv"]
+    B3["bin/mc"] --> C3["results/obj3.csv"]
+    C1 --> S1["scripts/graficar_obj1.py"]
+    C2 --> S2["scripts/graficar_obj2.py"]
+    C3 --> S3["scripts/graficar_obj3.py"]
+    S1 & S2 & S3 --> R["Resúmenes *_resumen.csv<br/>Tablas *_tablas.md<br/>Figuras *.png"]
+```
 
-| Objetivo | Comando | Genera en `results/` |
+Cada benchmark recibe como argumento la profundidad máxima (por defecto 10) y recorre desde r = 4 hasta ese valor, para la esfera y el toro. Se ejecutan desde la raíz del repositorio, porque escriben en `results/`.
+
+```bash
+bin/bench_vecinos 10
+bin/bench_octree 10
+bin/mc 10
+python scripts/graficar_obj1.py
+python scripts/graficar_obj2.py
+python scripts/graficar_obj3.py
+```
+
+| Objetivo | Programa | Archivos que genera en `results/` |
 |---|---|---|
-| 1 | `bin/bench_vecinos 10` y luego `python scripts/graficar_obj1.py` | `obj1.csv`, `obj1_resumen.csv`, `obj1_tiempo_{peor,azar}_{caras,aristas}.png`, `obj1_digitos.png` |
-| 2 | `bin/bench_octree 10` y luego `python scripts/graficar_obj2.py` | `obj2.csv`, `obj2_resumen.csv`, `obj2_total.png`, `obj2_componentes.png` |
-| 3 | `bin/mc 10` y luego `python scripts/graficar_obj3.py` | `obj3.csv`, `obj3_resumen.csv`, `obj3_vertices.png`, `obj3_tiempo.png`, `obj3_fraccion.png`, `esfera_r7.ply`, `toro_r7.ply` |
+| 1 | `bench_vecinos` y `graficar_obj1.py` | `obj1.csv`, `obj1_resumen.csv`, `obj1_tablas.md`, `obj1_tiempo_{peor,azar}_{caras,aristas}.png`, `obj1_digitos.png` |
+| 2 | `bench_octree` y `graficar_obj2.py` | `obj2.csv`, `obj2_resumen.csv`, `obj2_tablas.md`, `obj2_total.png`, `obj2_componentes.png` |
+| 3 | `mc` y `graficar_obj3.py` | `obj3.csv`, `obj3_resumen.csv`, `obj3_tablas.md`, `obj3_vertices.png`, `obj3_tiempo.png`, `obj3_fraccion.png`, `esfera_r7.ply`, `toro_r7.ply` |
 
-Cada ejecución **sobrescribe** los CSV del objetivo correspondiente.
-
-### Duración
-
-Medido en una laptop con Windows 11:
-
-| Profundidad máxima | `bench_vecinos` | `bench_octree` | `mc` |
-|---|---|---|---|
-| 7 | 16 s | 56 s | 24 s |
-| 10 | unos 8 minutos los tres juntos | | |
-
-Para una prueba rápida basta con `7` como argumento.
+Cada ejecución sobrescribe los archivos de su objetivo. Con r = 10, los tres benchmarks tardan en total unos 15 minutos en una laptop con Windows 11. Para una prueba rápida basta con `6` como argumento.
 
 ### Formato de los CSV
 
+Los tres CSV guardan una fila por corrida; los scripts calculan la mediana y el rango intercuartílico.
+
 | Archivo | Columnas |
 |---|---|
-| `obj1.csv` (una fila por corrida) | `r, caso, tipo, metodo, corrida, ns_por_consulta, digitos_reflejados` |
-| `obj2.csv` (una fila por corrida) | `superficie, r, hojas, celdas, consultas, vueltas, ms_octree, ms_tabla, metodo, estructura, corrida, ns_direccion, ns_existencia, ns_total` |
-| `obj3.csv` (una fila por método) | `superficie, r, celdas, metodo, t_por_celda, t_sopa, t_compartido, t_direccion, t_busqueda, fraccion_direccion, fraccion_busqueda, v_sopa, v_por_celda, v_compartido, triangulos` |
+| `obj1.csv` | `r, caso, tipo, metodo, corrida, ns_por_consulta, digitos_reflejados` |
+| `obj2.csv` | `superficie, r, hojas, celdas, consultas, vueltas, ms_octree, ms_tabla, metodo, estructura, corrida, ns_direccion, ns_existencia, ns_total` |
+| `obj3.csv` | `superficie, r, celdas, metodo, corrida, t_por_celda, t_sopa, t_compartido, t_direccion, t_busqueda, v_sopa, v_por_celda, v_compartido, triangulos` |
 
-Los valores de `caso` son `peor` y `azar`, los de `tipo` son `caras` y `aristas`, los de `metodo` son `schrack`, `samet` y `oraculo`, y los de `estructura` son `binaria` y `hash`. Los tiempos del objetivo 1 y 2 están en nanosegundos por consulta, y los del objetivo 3 en segundos. Los scripts de Python generan los `*_resumen.csv` y las figuras a partir de los CSV crudos, así que se pueden volver a graficar sin repetir el benchmark.
+Valores posibles: `caso` ∈ {`peor`, `azar`}, `tipo` ∈ {`caras`, `aristas`}, `metodo` ∈ {`schrack`, `samet`, `oraculo`} y `estructura` ∈ {`binaria`, `hash`}. Los tiempos de los objetivos 1 y 2 están en nanosegundos por consulta, y los del objetivo 3 en segundos.
 
 ### Recomendaciones para medir
 
-- Conectar la laptop a la corriente y cerrar otros programas pesados. Los tiempos se perturban con facilidad.
-- Cada medición se repite 5 veces y se reporta el **mínimo**, porque el ruido del sistema solo suma tiempo. Los CSV de los objetivos 1 y 2 guardan las 5 corridas crudas para ver la dispersión.
-- Los resultados cambian de una máquina a otra, y los tiempos de este README son de una sola laptop. Los conteos (hojas, celdas, vértices, dígitos reflejados) sí son exactamente reproducibles. Las consultas del objetivo 1 usan una semilla fija (2026).
-- `bin/mc` necesita que exista la carpeta `results/`, que ya viene en el repositorio. Si falta, avisa y termina.
+- Conectar la laptop a la corriente, activar el plan de energía de máximo rendimiento y cerrar los demás programas.
+- Los tiempos varían entre máquinas. Los conteos (hojas, celdas, vértices y dígitos reflejados) son exactamente reproducibles.
+- `bin/mc` necesita que exista la carpeta `results/`, que ya está en el repositorio.
 
 ---
 
@@ -179,153 +261,219 @@ Los valores de `caso` son `peor` y `azar`, los de `tipo` son `caras` y `aristas`
 
 | Parámetro | Valor |
 |---|---|
-| Esfera | centro (0.5, 0.5, 0.5), radio 0.35, constante de Lipschitz 1.74 |
-| Toro | centro (0.5, 0.5, 0.5), radio mayor 0.3, radio menor 0.1, constante de Lipschitz 1.30 |
-| Dominio | cubo [0, 1]³ |
-| Profundidad | r = 4…10 (de 16 a 1024 celdas por eje) |
-| Direcciones | 18: 6 caras y 12 aristas |
-| Repeticiones | 5 por medición, se reporta el mínimo |
-| Hilos | 1 |
+| Dominio | Cubo [0, 1]³ |
+| Esfera | Centro (0.5, 0.5, 0.5), radio 0.35, constante de Lipschitz 1.74 |
+| Toro | Centro (0.5, 0.5, 0.5), radio mayor 0.30, radio menor 0.10, constante de Lipschitz 1.30 |
+| Profundidad | r = 4…10, es decir, de 16 a 1024 celdas por eje |
+| Direcciones | 18: 6 por cara y 12 por arista |
+| Compilación | C++17, `-O2`, un hilo |
+| Repeticiones | 1 corrida de calentamiento y 11 corridas medidas, con los métodos intercalados |
+| Estadístico | Mediana y rango intercuartílico (IQR) |
 
-- **Construcción del octree.** Una celda de lado `a` y centro `p` no puede contener la superficie `F = 0` si `|F(p)| > L · a · √3 / 2`, donde `L` es la constante de Lipschitz. En ese caso se guarda como hoja grande. Si no, se subdivide hasta el nivel `r`. Es el mismo test que usa Marching Cubes para encontrar las celdas de superficie, así que toda celda de superficie es una hoja de nivel `r`, y también lo son las 4 celdas que comparten cada arista cortada. Por eso nunca hace falta buscar vecinos de otro tamaño.
-- **Objetivo 1.** 2²⁰ consultas por medición, en dos grupos. El *peor caso* son celdas cuya coordenada obliga a reflejar todos los dígitos (Samet recorre los `r` niveles). El *promedio* son celdas elegidas al azar.
-- **Objetivo 2.** Usa las mismas consultas que hace Marching Cubes (las vecinas por cara y por arista de cada celda de superficie), así que `N` crece con `r`. Si hay pocas consultas, el lote se repite hasta llegar a 2²⁰ consultas por medición. Antes de medir se verifica que los tres métodos den el mismo código y que la vecina exista en las dos estructuras.
-- **Objetivo 3.** Cada pasada se repite hasta acumular 50 ms. `fraccion_direccion` es el tiempo de calcular solo las direcciones dividido por el tiempo de la malla compartida, y `fraccion_busqueda` incluye además la verificación de existencia.
-- **Versiones de Marching Cubes que se comparan.** `mcSoup` (3 vértices por triángulo, la versión clásica), `mcPerCell` (los vértices se comparten dentro de la celda) y `mcShared` (se comparten entre celdas vecinas, la que usa el vecino).
+### Protocolo de medición
+
+```mermaid
+flowchart LR
+    W["Calentamiento<br/>una corrida por método,<br/>se descarta"] --> K["Corrida k<br/>Schrack → Samet → Oráculo"]
+    K -- "k = 1 … 11" --> K
+    K --> M["Mediana e IQR<br/>de las 11 corridas"]
+```
+
+Los métodos se intercalan dentro de cada corrida para que el ruido de la máquina (frecuencia variable del procesador, temperatura u otros procesos) se reparta por igual entre ellos. En una primera versión se tomaba el mínimo de cinco corridas seguidas por método, y la misma operación llegó a variar hasta dos veces según el momento en que se ejecutaba. La mediana de corridas intercaladas no se ve afectada por una corrida atípica.
+
+### Construcción del octree
+
+Una celda de lado `a` y centro `p` no puede contener la superficie `F = 0` si
+
+```
+|F(p)| > L · a · √3 / 2
+```
+
+donde `L` es la constante de Lipschitz de `F` y `a · √3 / 2` es la semidiagonal de la celda. En ese caso se guarda como una hoja grande; si no, se subdivide hasta el nivel `r`. Como el mallado usa la misma poda, toda celda activa es una hoja de nivel `r`, y también lo son las cuatro celdas que comparten cada arista cortada. Por eso nunca hace falta buscar vecinos de otro tamaño.
+
+| r | Esfera: hojas N | Esfera: celdas activas M | Toro: hojas N | Toro: celdas activas M |
+|---|---|---|---|---|
+| 4 | 3 032 | 584 | 3 032 | 424 |
+| 6 | 61 440 | 9 488 | 77 680 | 7 104 |
+| 8 | 1 010 192 | 151 400 | 1 910 112 | 112 040 |
+| 10 | 16 202 600 | 2 421 200 | 32 507 168 | 1 798 288 |
+
+### Carga de cada experimento
+
+- **Objetivo 1.** 2²⁰ consultas por medición, con semilla fija (2026), en dos grupos. En el *peor caso*, la coordenada desplazada obliga a Samet a reflejar los `r` dígitos. En el caso *al azar*, las celdas se eligen uniformemente.
+- **Objetivo 2.** Las mismas consultas que hace Marching Cubes: las vecinas por cara y por arista de cada celda activa. Si hay menos de 2²⁰ consultas, el lote se repite hasta alcanzar ese tamaño. Antes de medir se verifica que los tres métodos den el mismo código y que la vecina exista en las dos estructuras. La existencia se mide una vez por corrida y por estructura, porque no depende del método.
+- **Objetivo 3.** En cada corrida, cada pasada se repite hasta acumular 50 ms y se toma su tiempo medio. La fracción de búsqueda se calcula dividiendo la mediana del tiempo de las consultas de vecinos entre la mediana del tiempo de la malla compartida.
 
 ---
 
 ## Resultados
 
-Todos los números salen de los CSV de `results/`, corridos en una sola laptop conectada a la corriente, con el mínimo de 5 corridas.
+Medianas de 11 corridas en una laptop con Windows 11; entre paréntesis, el rango intercuartílico. Las tablas completas, para todas las profundidades, están en `results/obj1_tablas.md`, `results/obj2_tablas.md` y `results/obj3_tablas.md`.
 
 ### Objetivo 1: dirección del vecino
 
-Tiempo para calcular la dirección del vecino por cara, en nanosegundos por consulta:
+Tiempo de cálculo de la dirección con r = 10, en nanosegundos por consulta:
 
-| Caso | r | Schrack | Samet | Oráculo | Dígitos que refleja Samet |
+| Caso | Vecindad | Schrack | Samet | Oráculo | Dígitos reflejados por Samet |
 |---|---|---|---|---|---|
-| Peor caso | 4 | 41 | 42 | 34 | 4 |
-| Peor caso | 7 | 43 | 49 | 52 | 7 |
-| Peor caso | 10 | 52 | 57 | 84 | 10 |
-| Azar | 4 | 44 | 50 | 35 | 1.6 |
-| Azar | 7 | 42 | 51 | 53 | 1.9 |
-| Azar | 10 | 42 | 51 | 74 | 2.0 |
+| Peor caso | Caras | 43.8 (1.3) | 58.4 (6.0) | 72.3 (2.3) | 10.00 |
+| Peor caso | Aristas | 56.2 (3.7) | 93.0 (3.8) | 74.4 (5.1) | 10.00 |
+| Al azar | Caras | 45.9 (4.5) | 57.3 (8.6) | 77.1 (5.5) | 1.99 |
+| Al azar | Aristas | 57.2 (2.5) | 83.3 (6.9) | 73.1 (3.8) | 2.65 |
 
-![Peor caso, caras](results/obj1_tiempo_peor_caras.png)
+```mermaid
+%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#1E3A5F, #B8742A, #8A9099"}}}}%%
+xychart-beta
+    title "Peor caso por arista: ns por consulta según la profundidad"
+    x-axis "Profundidad r" [4, 5, 6, 7, 8, 9, 10]
+    y-axis "ns por consulta" 0 --> 100
+    line [55.8, 55.1, 56.6, 58.4, 56.6, 56.1, 56.2]
+    line [61.7, 67.0, 76.5, 78.1, 81.7, 84.7, 93.0]
+    line [35.3, 41.3, 47.7, 55.0, 61.1, 66.8, 74.4]
+```
 
-![Caso al azar, caras](results/obj1_tiempo_azar_caras.png)
+*Azul oscuro: Schrack (plano, 56.2 ns en r = 10). Naranja: Samet (crece hasta 93.0 ns). Gris: oráculo (crece hasta 74.4 ns).*
 
-![Dígitos reflejados por Samet](results/obj1_digitos.png)
+| Peor caso por cara | Peor caso por arista |
+|---|---|
+| ![Peor caso por cara](results/obj1_tiempo_peor_caras.png) | ![Peor caso por arista](results/obj1_tiempo_peor_aristas.png) |
 
-- **Los dígitos reflejados confirman la teoría.** En el peor caso Samet refleja exactamente `r` dígitos (4, 7, 10). Al azar refleja casi siempre 2 (de 1.6 a 2.0 en las caras), sin importar cuán profundo sea el árbol. Por eso el promedio de Samet ya es O(1).
-- **Schrack se mantiene casi plano** en el peor caso con caras: entre 41 y 43 ns de r = 4 a r = 9, y 52 ns en r = 10. Samet sube de 42 a 57 ns y el oráculo de 34 a 84 ns.
-- **La diferencia entre Schrack y Samet es chica con caras** (de 1 a 5 ns en el peor caso). A estos tamaños, 10 niveles son pocas operaciones.
-- **Con aristas la diferencia se ve más.** En el peor caso, Schrack se queda en 55, 55 y 54 ns (r = 4, 7 y 10), mientras Samet sube de 62 a 77 y 101 ns. Hay un punto ruidoso de Schrack en r = 6 (75 ns). Para r pequeño, el oráculo es el más rápido (34 ns en r = 4) y solo lo supera Schrack desde r = 7. Las figuras están en `results/obj1_tiempo_peor_aristas.png` y `results/obj1_tiempo_azar_aristas.png`.
-- **Al azar, Schrack y Samet casi no cambian con r.** Es lo esperado: Samet refleja solo 2 dígitos.
+| Al azar por cara | Dígitos reflejados por Samet |
+|---|---|
+| ![Al azar por cara](results/obj1_tiempo_azar_caras.png) | ![Dígitos reflejados](results/obj1_digitos.png) |
+
+#### ¿Se observa el tiempo constante?
+
+Sí. La tabla divide el tiempo en r = 10 entre el tiempo en r = 4; un cociente cercano a 1 indica que el costo no depende de la profundidad.
+
+| Caso | Vecindad | Schrack | Samet | Oráculo |
+|---|---|---|---|---|
+| Peor caso | Caras | **1.01** | 1.32 | 2.02 |
+| Peor caso | Aristas | **1.01** | 1.51 | 2.11 |
+| Al azar | Caras | 1.08 | 1.09 | 2.15 |
+| Al azar | Aristas | 0.99 | 1.07 | 1.98 |
+
+- **Schrack es constante.** En el peor caso se mantiene en unos 44 ns por cara y 56 ns por arista de r = 4 a r = 10.
+- **Samet crece en el peor caso**, porque refleja exactamente `r` dígitos: por arista pasa de 61.7 a 93.0 ns. Con r = 10, Schrack tarda el 60 % del tiempo de Samet por arista y el 75 % por cara.
+- **Al azar, Samet también es casi constante**, porque refleja en promedio menos de 2 dígitos por cara y menos de 3 por arista, en línea con su costo esperado O(1).
+- **El oráculo duplica su tiempo** entre r = 4 y r = 10, porque decodifica y vuelve a codificar recorriendo los bits.
 
 ### Objetivo 2: verificación de existencia
 
-Calcular la dirección no dice si esa celda está en el árbol. Hay que buscarla en el arreglo ordenado (búsqueda binaria, O(log N)) o en una tabla hash (O(1) esperado).
-
-Con r = 10, en nanosegundos por consulta:
+Búsqueda completa con r = 10, en nanosegundos por consulta:
 
 | Superficie | Hojas | Método | Estructura | Dirección | Existencia | Total |
 |---|---|---|---|---|---|---|
-| esfera | 16.2 M | Schrack | binaria | 27 | 138 | 197 |
-| esfera | 16.2 M | Schrack | hash | 16 | 79 | 130 |
-| esfera | 16.2 M | Samet | binaria | 26 | 121 | 204 |
-| esfera | 16.2 M | oráculo | binaria | 106 | 243 | 290 |
-| toro | 32.5 M | Schrack | binaria | 26 | 136 | 184 |
-| toro | 32.5 M | Schrack | hash | 27 | 66 | 108 |
-| toro | 32.5 M | Samet | binaria | 12 | 60 | 86 |
+| Esfera | 16.2 M | Schrack | Binaria | 28.2 | 139.1 | 189.2 (8.2) |
+| Esfera | 16.2 M | Schrack | Hash | 28.2 | 66.1 | 118.7 (4.6) |
+| Esfera | 16.2 M | Samet | Binaria | 27.6 | 139.1 | 205.2 (11.5) |
+| Esfera | 16.2 M | Oráculo | Binaria | 73.0 | 139.1 | 196.0 (4.9) |
+| Toro | 32.5 M | Schrack | Binaria | 28.3 | 143.8 | 198.5 (7.1) |
+| Toro | 32.5 M | Schrack | Hash | 28.3 | 63.2 | 109.6 (8.9) |
+| Toro | 32.5 M | Samet | Binaria | 28.9 | 143.8 | 212.4 (7.8) |
+| Toro | 32.5 M | Oráculo | Binaria | 73.4 | 143.8 | 205.9 (7.1) |
 
-![Búsqueda completa](results/obj2_total.png)
+Los tres tiempos se miden por separado, así que el total no es exactamente la suma de las otras dos columnas.
 
-![Dirección frente a existencia](results/obj2_componentes.png)
+| Consulta completa | Dirección frente a existencia |
+|---|---|
+| ![Búsqueda completa](results/obj2_total.png) | ![Componentes](results/obj2_componentes.png) |
 
-- **Verificar la existencia pesa más que calcular la dirección.** Con Schrack y búsqueda binaria, la existencia es el 70 % (esfera) y el 74 % (toro) del total en r = 10.
-- **En las consultas de Marching Cubes, Schrack y Samet cuestan casi lo mismo** (de 12 a 27 ns por dirección). Las vecinas están cerca, así que comparten un ancestro cercano y Samet casi no recorre niveles.
-- **La tabla hash baja el total** de 197 a 130 ns en la esfera y de 184 a 108 ns en el toro, es decir, entre 1.5 y 1.7 veces.
-- **Pero construir la tabla es caro.** Con r = 10 tarda 3.5 s en la esfera y 5.4 s en el toro, mientras construir el octree toma 2.2 s y 1.9 s. Para una sola pasada de Marching Cubes, la tabla no se paga sola.
-- **La fila de Samet con búsqueda binaria en el toro no es confiable.** Da 60 ns de existencia, contra unos 136 ns de Schrack con la misma estructura y las mismas consultas. La verificación no depende del método, así que esa diferencia es ruido.
+- **Verificar la existencia domina la consulta.** Con Schrack y búsqueda binaria es el 74 % del total en la esfera y el 72 % en el toro.
+- **En las consultas de Marching Cubes, Schrack y Samet cuestan lo mismo** (unos 28 ns por dirección). Las vecinas consultadas comparten un ancestro cercano, así que Samet casi no recorre niveles.
+- **La tabla hash reduce el total** de 189.2 a 118.7 ns en la esfera y de 198.5 a 109.6 ns en el toro.
+- **Pero construirla es caro.** Con r = 10 tarda 3.01 s en la esfera y 5.34 s en el toro, frente a 0.92 s y 1.95 s del octree. Una pasada de Marching Cubes ahorra 0.46 s y 0.44 s, así que la tabla no se amortiza en una sola pasada.
 
 ### Objetivo 3: Marching Cubes con vértices compartidos
 
-Vértices de la malla con la esfera:
+Vértices de la malla:
 
-| r | Celdas | 3 por triángulo | Compartidos en la celda | Compartidos entre celdas |
-|---|---|---|---|---|
-| 4 | 584 | 3 480 | 2 328 | 582 |
-| 7 | 37 856 | 227 112 | 151 416 | 37 854 |
-| 10 | 2 421 200 | 14 527 176 | 9 684 792 | 2 421 198 |
+| Superficie | r | Celdas activas | 3 por triángulo | Compartidos en la celda | Compartidos entre celdas | Triángulos |
+|---|---|---|---|---|---|---|
+| Esfera | 7 | 37 856 | 227 112 | 151 416 | 37 854 | 75 704 |
+| Esfera | 10 | 2 421 200 | 14 527 176 | 9 684 792 | 2 421 198 | 4 842 392 |
+| Toro | 7 | 27 720 | 166 320 | 110 880 | 27 720 | 55 440 |
+| Toro | 10 | 1 798 288 | 10 789 728 | 7 193 152 | 1 798 288 | 3 596 576 |
 
-![Vértices de la malla](results/obj3_vertices.png)
+Tiempo de generación con r = 10, en segundos:
 
-- **La malla compartida tiene 6 veces menos vértices** que la de 3 por triángulo, y 4 veces menos que la que solo comparte dentro de la celda. La proporción es la misma en todas las profundidades y en las dos superficies.
-- **Casi no sobran vértices:** hay 582 vértices para 584 celdas con r = 4, es decir, aproximadamente un vértice por celda de superficie.
+| Superficie | `mcSoup` | `mcPerCell` | `mcShared` con Schrack | `mcShared` con Samet | `mcShared` con oráculo |
+|---|---|---|---|---|---|
+| Esfera | 0.479 | 0.464 | 1.667 | 1.729 | 1.884 |
+| Toro | 0.407 | 0.392 | 1.260 | 1.314 | 1.432 |
 
-Tiempo total con r = 10 (en segundos, con Schrack):
+Fracción del tiempo de `mcShared` dedicada a buscar vecinos, con r = 10:
 
-| Superficie | 3 por triángulo | Compartidos en la celda | Compartidos entre celdas |
+| Superficie | Método | Solo la dirección | Dirección y existencia |
 |---|---|---|---|
-| esfera | 0.46 | 0.44 | 1.61 |
-| toro | 0.39 | 0.38 | 1.20 |
+| Esfera | Schrack | 10.7 % | 66.1 % |
+| Esfera | Samet | 10.8 % | 68.0 % |
+| Esfera | Oráculo | 25.4 % | 65.2 % |
+| Toro | Schrack | 10.4 % | 63.3 % |
+| Toro | Samet | 11.0 % | 65.4 % |
+| Toro | Oráculo | 24.6 % | 62.5 % |
 
-![Tiempo de Marching Cubes](results/obj3_tiempo.png)
+```mermaid
+%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#1E3A5F"}}}}%%
+xychart-beta
+    title "Esfera, r = 10: porcentaje del tiempo de mcShared"
+    x-axis ["Schrack: dirección", "Schrack: dir. + existencia", "Samet: dirección", "Samet: dir. + existencia"]
+    y-axis "% del tiempo de mallado" 0 --> 80
+    bar [10.7, 66.1, 10.8, 68.0]
+```
 
-- **Compartir vértices entre celdas es más lento** (3.5 veces en la esfera, 3.2 en el toro). Hay que buscar a los vecinos y verificar que existen. Se gana en vértices y se pierde en tiempo.
+| Vértices por variante | Tiempo de generación | Peso de la búsqueda de vecinos |
+|---|---|---|
+| ![Vértices](results/obj3_vertices.png) | ![Tiempo](results/obj3_tiempo.png) | ![Fracción](results/obj3_fraccion.png) |
 
-Parte de ese tiempo que se va en buscar vecinos, con r = 10:
-
-| Superficie | Método | Solo la dirección | Dirección + existencia |
-|---|---|---|---|
-| esfera | Schrack | 11 % | 65 % |
-| esfera | Samet | 13 % | 67 % |
-| esfera | oráculo | 25 % | 62 % |
-| toro | Schrack | 11 % | 64 % |
-| toro | Samet | 11 % | 65 % |
-| toro | oráculo | 25 % | 62 % |
-
-![Fracción del tiempo en buscar vecinos](results/obj3_fraccion.png)
-
-- **Calcular la dirección es poco** (11 % con Schrack), y Schrack y Samet casi empatan.
-- **Dirección más existencia es el 62 % al 67 %**, para cualquiera de los tres métodos. La búsqueda binaria domina y borra la diferencia entre los métodos.
-- **El oráculo sí se nota** (25 %). Es el único que decodifica y vuelve a codificar.
-- **La fracción de dirección más existencia es sensible al ruido.** Se calcula con pasadas medidas por separado y en profundidades pequeñas a veces da más de 100 %. Es ruido de la máquina, no un resultado.
+- **La malla compartida usa 6 veces menos vértices** que `mcSoup` y 4 veces menos que `mcPerCell`, con los mismos triángulos. La proporción es la misma en todas las profundidades.
+- **Compartir vértices es más lento:** 3.48 veces el tiempo de `mcSoup` en la esfera y 3.10 en el toro.
+- **Con Schrack, `mcShared` es un 3.6 % más rápido que con Samet** en la esfera y un 4.1 % en el toro.
+- **Calcular la dirección es cerca del 11 % del mallado**, pero con la verificación de existencia sube a entre el 63 % y el 68 % con cualquier método. La búsqueda binaria es el cuello de botella.
 
 ### Objetivo 4: corrección
 
-`make test` pasa completo (ver la sección Tests). En resumen, Schrack, Samet y el oráculo devuelven el mismo código con códigos aleatorios y en todas las consultas reales de Marching Cubes. La malla compartida es idéntica con los tres métodos, es cerrada y sus triángulos coinciden con los de la versión sin compartir.
+`make test` pasa completo. Schrack, Samet y el oráculo devuelven el mismo código con códigos aleatorios y en todas las consultas reales de Marching Cubes, y la malla compartida es idéntica con los tres métodos, cerrada y con los mismos triángulos que `mcSoup`.
 
-Como comprobación visual, `bin/mc` guarda las mallas con r = 7 en `results/esfera_r7.ply` y `results/toro_r7.ply`, y se abrieron en MeshLab. Las dos superficies se ven continuas y sin huecos, y los conteos que muestra MeshLab coinciden con `results/obj3.csv`.
+`test_vecinos` reproduce los ejemplos numéricos del artículo de Schrack. Los ejemplos en 2D se reproducen porque las funciones de dilatación y suma están parametrizadas por la dimensión.
 
-| Malla | Vértices | Caras | Fuente de los conteos |
-|---|---|---|---|
-| esfera, r = 7 | 37 854 | 75 704 | `obj3.csv`: `v_compartido` y `triangulos` |
-| toro, r = 7 | 27 720 | 55 440 | `obj3.csv`: `v_compartido` y `triangulos` |
+| Ejemplo del artículo | Valor esperado | Resultado |
+|---|---|---|
+| Figura 3: dilataciones en 3D de 0 a 7, con r = 3 | 0, 1, 8, 9, 64, 65, 72, 73 | Correcto |
+| Dilatación en 3D de 5 | 65 | Correcto |
+| Suma dilatada en 2D: 7 + 6, con r = 4 | Dilatación de 13 | Correcto |
+| Dilatación en 2D de −5 | 69 (r = 3) y 325 (r = 4) | Correcto |
+| Contracción en 2D de 69 | −5 | Correcto |
+| Suma de location codes en 2D: 3013₄ ⊕ 2032₄ | 1301₄ | Correcto |
+| Incrementos básicos en 2D, con r = 4 | 1, 3, 2, 87, 85, 255, 170, 171 | Correcto |
 
-![Malla de la esfera en MeshLab](results/malla_esfera_r7.png)
+Como comprobación visual, `bin/mc` exporta las mallas con r = 7 a `results/esfera_r7.ply` y `results/toro_r7.ply`. Abiertas en MeshLab, ambas superficies son continuas y sin huecos, y sus conteos coinciden con `results/obj3.csv`.
 
-![Malla del toro en MeshLab](results/malla_toro_r7.png)
+| Esfera, r = 7: 37 854 vértices y 75 704 triángulos | Toro, r = 7: 27 720 vértices y 55 440 triángulos |
+|---|---|
+| ![Malla de la esfera](results/malla_esfera_r7.png) | ![Malla del toro](results/malla_toro_r7.png) |
+
+---
 
 ## Conclusiones
 
-1. **El método de Schrack funciona y es correcto.** Coincide con Samet y con el oráculo en todas las pruebas, incluyendo la malla completa.
-2. **El O(1) se ve, pero la ventaja es pequeña.** Schrack casi no cambia con `r` (41 a 52 ns en el peor caso con caras), y Samet sube de 42 a 57 ns porque refleja `r` dígitos. Con aristas la diferencia es mayor (54 frente a 101 ns en r = 10). Con r ≤ 10, igual, la ganancia en nanosegundos es chica.
-3. **El promedio de Samet ya es O(1).** Al azar solo refleja unos 2 dígitos, y por eso casi no pierde frente a Schrack.
-4. **En Marching Cubes lo que domina es verificar que el vecino existe,** no calcular su dirección. Con búsqueda binaria es casi dos tercios del tiempo. La tabla hash ayuda (hasta 1.7 veces), pero construirla cuesta más que lo que ahorra en una sola pasada.
-5. **Compartir vértices reduce 6 veces los vértices de la malla,** a cambio de que el programa sea unas 3 veces más lento.
+1. **El método de Schrack es correcto.** Coincide con Samet y con el oráculo en todas las pruebas, reproduce los ejemplos del artículo y genera la misma malla.
+2. **El tiempo constante se observa.** El cálculo de la dirección con Schrack no cambia entre r = 4 y r = 10 (cociente 1.01), mientras que Samet crece un 32 % por cara y un 51 % por arista en el peor caso.
+3. **La ventaja es pequeña con r ≤ 10.** Al azar y en las consultas de Marching Cubes, Samet también refleja pocos dígitos y cuesta casi lo mismo. En el peor caso por arista, Schrack ahorra unos 37 ns por consulta.
+4. **En Marching Cubes domina la verificación de existencia**, no el cálculo de la dirección: con búsqueda binaria es entre el 72 % y el 74 % de la consulta y cerca de dos tercios del tiempo de la malla. Por eso la mejora de Schrack se reduce a un 4 % del tiempo total. La tabla hash reduce ese costo, pero su construcción no se amortiza en una sola pasada.
+5. **Compartir vértices reduce 6 veces el tamaño de la malla**, a cambio de unas 3.5 veces más tiempo de generación.
 
 ---
 
 ## Limitaciones
 
-- **Los tiempos siguen teniendo algo de ruido.** Aunque se reporta el mínimo de 5 corridas, hay puntos aislados que no son reales (la fila de Samet en el toro del objetivo 2 y el pico de Schrack en r = 6 con aristas). Para cerrar mejor la comparación habría que repetir en una máquina más estable o con más corridas.
-- **Solo se cubren vecinos de igual tamaño.** El criterio de subdivisión garantiza que las celdas que comparten una arista cortada sean todas de nivel r, así que el caso de vecinos de otro tamaño no se presenta.
-- **Con enteros de 64 bits** la resolución máxima es r = 20, que alcanza de sobra para r = 10.
-- **No hay visualizador.** La malla se guarda como `.ply` (solo para r = 7) y se puede abrir con cualquier visor, por ejemplo MeshLab.
+- **Una sola máquina.** Los rangos intercuartílicos son pequeños frente a las diferencias que se discuten, pero las diferencias de pocos puntos porcentuales dependen de este equipo.
+- **Solo vecinos de igual tamaño.** El criterio de subdivisión garantiza que las celdas que comparten una arista cortada sean todas de nivel `r`, así que no se presentan vecinos de otro tamaño.
+- **La tabla hash no se probó dentro del mallado.** `mcShared` usa búsqueda binaria sobre las celdas activas; la tabla hash solo se midió en el objetivo 2.
+- **Resolución máxima.** Con enteros de 64 bits, r ≤ 20, suficiente para las profundidades estudiadas.
+- **Visualización externa.** Las mallas se exportan en formato `.ply` (solo para r = 7) y se inspeccionan con un visor como MeshLab.
 
+---
 
 ## Referencias
 

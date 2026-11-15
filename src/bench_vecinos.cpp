@@ -8,7 +8,7 @@
 
 using namespace std;
 
-const int CORRIDAS = 5;
+const int CORRIDAS = 11;
 const int TOTAL_CONSULTAS = 1 << 20;
 
 struct ConsultaVecino {
@@ -95,9 +95,13 @@ int main(int argc, char* argv[]) {
                 double digitos = (double)digitosReflejados / TOTAL_CONSULTAS;
 
                 for (int m = 0; m < TOTAL_METODOS; m++) {
-                    for (int corrida = 1; corrida <= CORRIDAS; corrida++) {
+                    checksum = checksum + runNeighborQueries(r, consultas, metodos[m].funcion);
+                }
+
+                for (int corrida = 1; corrida <= CORRIDAS; corrida++) {
+                    for (int m = 0; m < TOTAL_METODOS; m++) {
                         auto inicio = chrono::steady_clock::now();
-                        checksum = checksum ^ runNeighborQueries(r, consultas, metodos[m].funcion);
+                        checksum = checksum + runNeighborQueries(r, consultas, metodos[m].funcion);
                         chrono::duration<double, nano> transcurrido = chrono::steady_clock::now() - inicio;
                         double ns = transcurrido.count() / TOTAL_CONSULTAS;
 

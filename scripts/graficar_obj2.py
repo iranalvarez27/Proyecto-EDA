@@ -16,6 +16,12 @@ COLOR = {"schrack": "#2a78d6", "samet": "#eb6834", "oraculo": "#1baf7a"}
 LINEA = {"binaria": ("-", "o"), "hash": ("--", "s")}
 COLUMNAS = ["ns_direccion", "ns_existencia", "ns_total"]
 
+def cuartiles(valores):
+    if len(valores) == 1:
+        return valores[0], valores[0], valores[0]
+    q1, mediana, q3 = statistics.quantiles(valores, n=4, method="inclusive")
+    return q1, mediana, q3
+
 def leer():
     grupos = defaultdict(list)
     with open(CARPETA / "obj2.csv", encoding="utf-8", newline="") as f:
@@ -38,9 +44,9 @@ def leer():
             "corridas": len(filas),
         }
         for columna in COLUMNAS:
-            valores = [float(x[columna]) for x in filas]
-            fila[columna] = round(min(valores), 2)
-            fila[columna + "_desv"] = round(statistics.stdev(valores), 2) if len(valores) > 1 else 0.0
+            q1, mediana, q3 = cuartiles([float(x[columna]) for x in filas])
+            fila[columna] = round(mediana, 2)
+            fila[columna + "_iqr"] = round(q3 - q1, 2)
         resumen.append(fila)
     return resumen
 
@@ -82,7 +88,7 @@ def figura_total(resumen):
                         color=COLOR[metodo], label=f"{metodo} + {estructura}")
         estilo(ax, superficie)
     ejes[0].set_ylim(bottom=0)
-    ejes[0].set_ylabel("Búsqueda completa (ns por consulta)")
+    ejes[0].set_ylabel("Búsqueda completa (ns por consulta, mediana)")
     ejes[1].legend(frameon=False, fontsize=9, loc="upper left", bbox_to_anchor=(1.0, 1.0))
     fig.tight_layout()
     fig.savefig(CARPETA / "obj2_total.png", dpi=160)
@@ -107,20 +113,62 @@ def figura_componentes(resumen):
         estilo(ax, f"{superficie}: verificación de existencia")
         ax.set_ylim(bottom=0)
 
-    ejes[0][0].set_ylabel("ns por consulta")
-    ejes[1][0].set_ylabel("ns por consulta")
+    ejes[0][0].set_ylabel("ns por consulta (mediana)")
+    ejes[1][0].set_ylabel("ns por consulta (mediana)")
     ejes[0][1].legend(frameon=False, fontsize=9)
     ejes[1][1].legend(frameon=False, fontsize=9)
     fig.tight_layout()
     fig.savefig(CARPETA / "obj2_componentes.png", dpi=160)
     plt.close(fig)
 
+def buscar(resumen, superficie, r, metodo, estructura):
+    for fila in resumen:
+        if (fila["superficie"] == superficie and fila["r"] == r and
+                fila["metodo"] == metodo and fila["estructura"] == estructura):
+            return fila
+    return None
+
+def guardar_tablas(resumen):
+    rmax = max(fila["r"] for fila in resumen)
+    lineas = ["# Objetivo 2: tablas generadas desde obj2.csv", "",
+              "Mediana de las corridas en ns por consulta; entre paréntesis, el rango intercuartílico.", "",
+              f"## Búsqueda completa con r = {rmax}", "",
+              "| Superficie | Hojas | Método | Estructura | Dirección | Existencia | Total | Existencia / total |",
+              "|---|---|---|---|---|---|---|---|"]
+    for superficie in SUPERFICIES:
+        for metodo in METODOS:
+            for estructura in ESTRUCTURAS:
+                f = buscar(resumen, superficie, rmax, metodo, estructura)
+                if f is None:
+                    continue
+                lineas.append(
+                    f"| {superficie} | {f['hojas']:,} | {metodo} | {estructura} | "
+                    f"{f['ns_direccion']:.0f} ({f['ns_direccion_iqr']:.0f}) | "
+                    f"{f['ns_existencia']:.0f} ({f['ns_existencia_iqr']:.0f}) | "
+                    f"{f['ns_total']:.0f} ({f['ns_total_iqr']:.0f}) | "
+                    f"{100 * f['ns_existencia'] / f['ns_total']:.0f} % |")
+
+    lineas += ["", "## Tamaño de cada octree", "",
+               "| Superficie | r | Hojas N | Celdas de superficie M | Consultas | Construir octree (ms) | Construir tabla hash (ms) |",
+               "|---|---|---|---|---|---|---|"]
+    vistos = set()
+    for fila in sorted(resumen, key=lambda x: (x["superficie"], x["r"])):
+        clave = (fila["superficie"], fila["r"])
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        lineas.append(f"| {fila['superficie']} | {fila['r']} | {fila['hojas']:,} | {fila['celdas']:,} | "
+                      f"{fila['consultas']:,} | {fila['ms_octree']:.1f} | {fila['ms_tabla']:.1f} |")
+    lineas.append("")
+    (CARPETA / "obj2_tablas.md").write_text("\n".join(lineas), encoding="utf-8")
+
 def main():
     resumen = leer()
     guardar(resumen)
+    guardar_tablas(resumen)
     figura_total(resumen)
     figura_componentes(resumen)
-    print("Generados: results/obj2_resumen.csv, results/obj2_total.png, results/obj2_componentes.png")
+    print("Generados: results/obj2_resumen.csv, results/obj2_tablas.md, results/obj2_total.png, results/obj2_componentes.png")
 
 if __name__ == "__main__":
     main()

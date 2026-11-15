@@ -10,7 +10,7 @@
 
 using namespace std;
 
-const int CORRIDAS = 5;
+const int CORRIDAS = 11;
 const long long MINIMO_CONSULTAS = 1 << 20;
 
 struct Metodo {
@@ -155,33 +155,40 @@ int main(int argc, char* argv[]) {
                  << " octree=" << msOctree << "ms tabla=" << msTabla << "ms\n";
 
             for (int m = 0; m < TOTAL_METODOS; m++) {
+                checksum = checksum ^ runDirection(r, consultas, vueltas, metodos[m].funcion);
                 for (int e = 0; e < 2; e++) {
-                    bool usarHash = (e == 1);
-                    double sumaTotal = 0;
+                    checksum = checksum + runFull(r, consultas, vueltas, metodos[m].funcion, e == 1, hojas, tabla);
+                }
+            }
+            for (int e = 0; e < 2; e++) {
+                checksum = checksum + runExistence(r, vecinas, vueltas, e == 1, hojas, tabla);
+            }
 
-                    for (int corrida = 1; corrida <= CORRIDAS; corrida++) {
-                        inicio = chrono::steady_clock::now();
-                        checksum = checksum ^ runDirection(r, consultas, vueltas, metodos[m].funcion);
-                        double nsDireccion = elapsedNs(inicio) / total;
+            for (int corrida = 1; corrida <= CORRIDAS; corrida++) {
+                double nsExistencia[2];
+                for (int e = 0; e < 2; e++) {
+                    inicio = chrono::steady_clock::now();
+                    checksum = checksum + runExistence(r, vecinas, vueltas, e == 1, hojas, tabla);
+                    nsExistencia[e] = elapsedNs(inicio) / total;
+                }
 
-                        inicio = chrono::steady_clock::now();
-                        checksum = checksum + runExistence(r, vecinas, vueltas, usarHash, hojas, tabla);
-                        double nsExistencia = elapsedNs(inicio) / total;
+                for (int m = 0; m < TOTAL_METODOS; m++) {
+                    inicio = chrono::steady_clock::now();
+                    checksum = checksum ^ runDirection(r, consultas, vueltas, metodos[m].funcion);
+                    double nsDireccion = elapsedNs(inicio) / total;
 
+                    for (int e = 0; e < 2; e++) {
+                        bool usarHash = (e == 1);
                         inicio = chrono::steady_clock::now();
                         checksum = checksum + runFull(r, consultas, vueltas, metodos[m].funcion, usarHash, hojas, tabla);
                         double nsTotal = elapsedNs(inicio) / total;
-                        sumaTotal = sumaTotal + nsTotal;
 
                         csv << superficies[s].nombre << "," << r << "," << hojas.size() << ","
                             << celdas.size() << "," << consultas.size() << "," << vueltas << ","
                             << msOctree << "," << msTabla << "," << metodos[m].nombre << ","
                             << estructuras[e] << "," << corrida << "," << nsDireccion << ","
-                            << nsExistencia << "," << nsTotal << "\n";
+                            << nsExistencia[e] << "," << nsTotal << "\n";
                     }
-
-                    cout << "  " << metodos[m].nombre << " + " << estructuras[e] << ": "
-                         << sumaTotal / CORRIDAS << " ns/consulta\n";
                 }
             }
         }
