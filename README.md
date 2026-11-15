@@ -3,6 +3,7 @@
 Proyecto de curso I · **CS3014 Estructuras de Datos Avanzadas** · Universidad de Ingeniería y Tecnología (UTEC) · 2026-2
 
 **Integrantes:** Irán María Alvarez Flores, Harold Canto Vidal y Luis Fernando Izaguirre Zavaleta
+
 **Docente:** Víctor Racsó Galván Oyola
 
 **Artículo base:** G. Schrack, *Finding neighbors of equal size in linear quadtrees and octrees in constant time*, CVGIP: Image Understanding 55(3), 221–230, 1992.
